@@ -2,10 +2,10 @@
 /*
 Plugin Name: Joomla2WP Migrated Users Authentication Plugin
 Description: Authenticate users migrated from Joomla and update their WP passwords
-Version: 1.1.0
-Author: lucky62, asmartin
+Version: 1.3.0
+Author: lucky62, asmartin, luthien_in_edhil
 */
-
+require_once (ABSPATH . 'wp-includes/class-phpass.php');
 // plugin must run before any other authentication plugins -
 add_filter('authenticate', 'joomla_mig_auth', 1, 3);
 
@@ -17,70 +17,58 @@ add_filter('authenticate', 'joomla_mig_auth', 1, 3);
 // and if is correct WP password of user is udated.
 
 function joomla_mig_auth( $user, $username, $password ) {
-
    if ( is_a($user, 'WP_User') ) { return $user; }
 
    // check existence of required parameters
-	if ( empty($username) || empty($password) ) return $user;
-	
-	// retrieve user data
-	$userdata = get_user_by('login', $username);
-	if ( !$userdata ) return $user;
+   if ( empty($username) || empty($password) ) return $user;
+
+   // retrieve user data
+   $userdata = get_user_by('login', $username);
+   if ( !$userdata ) return $user;
    if ( !$userdata->joomlapass ) return $user;
 
-   // authenticate against stored joomla password
+   // try authenticating against stored joomla password
    $auth_success = false;
    if (strpos($userdata->joomlapass, '$P$') === 0) {
-       // Use PHPass method
-       $auth_success = auth_joomla_phpass( $username, $password, $userdata->joomlapass );
+       // use CheckPassword
+       $auth_success = use_wp_checkpassword($password, $userdata->joomlapass);
+   } else if (strpos($userdata->joomlapass, '$2y') === 0){
+      // Looks like a job for php's builtin password_verify - fits on one line here
+      $auth_success = password_verify($password , $userdata->joomlapass);
    } else {
-       // Use md5:salt method
-       $auth_success = auth_joomla( $username, $password, $userdata->joomlapass );
+      // Use Joomla's old md5:salt method
+      $auth_success = use_md5_salt($password, $userdata->joomlapass);
    }
    if ( $auth_success ) {
-      // update WP user password
+      // password is OK; update WP with user-provided password
       $user_id = $userdata->ID;
-      wp_update_user( array ('ID' => $user_id, 'user_pass' => $password) ) ;
-
+      wp_set_password($password, $user_id);
       // rename joomlapass to joomlapassbak to avoid rewrite WP password hash repeatedly
-      update_user_meta( $user_id, 'joomlapassbak', $userdata->joomlapass );
-      delete_user_meta( $user_id, 'joomlapass' );
-
-   }
-   
+      update_user_meta($user_id, 'joomlapassbak', $userdata->joomlapass);
+      delete_user_meta($user_id, 'joomlapass');
+   }  
    return $user;
-
 }
 
 
-// this function should be changed if passwords are encrypted by non default Joomla encryption method
-// default method is md5 hash of password + salt
-// $joomlapass contains md5 hash and salt separated by colon ':'
-// for other methods of joomla encryption methods refer to Joomla JUserHelper class
+// change (or add to) these this functions if passwords are encrypted by non default Joomla 
+// encryption method
 
-function auth_joomla_phpass( $username, $password, $joomlapass ) {
-        // Use PHPass's portable hashes with a cost of 10.
-        $phpass = new PasswordHash(10, true);
-
-        $password = stripslashes($password);
-
-        return $phpass->CheckPassword($password, $joomlapass);
+// this function checks the password using Wordpress' CheckPassword funtion (in class-phpass.php)
+function use_wp_checkpassword($password, $joomlapass) {
+    // Use PHPass's portable hashes with a cost of 10.
+    $phpass = new PasswordHash(10, true);
+    $password = stripslashes($password);
+    return $phpass->CheckPassword($password, $joomlapass);
 }
 
-function auth_joomla( $username, $password, $joomlapass ) {
+// this function is when Joomla's md5 hash + salt separated by a colon ':' is used. It 
+// simply replicates the same mechanism with the user provided pw and compares the outcome
+function use_md5_salt($password, $joomlapass) {
+    $parts  = explode( ':', $joomlapass );
+    $joomlahash = $parts[0];
+    $joomlasalt = $parts[1];
+    $passwhash = ($joomlasalt) ? md5($password.$joomlasalt) : md5($password);
 
-	$parts	= explode( ':', $joomlapass );
-	$joomlahash	= $parts[0];
-	$joomlasalt	= $parts[1];
-	
-	$passwhash = ($joomlasalt) ? md5($password.$joomlasalt) : md5($password);
-	
-   if ( $joomlahash == $passwhash ) {
-      return true;
-   } else {
-      return false;
-   }
-   
+    return ($joomlahash == $passwhash);
 }
-
-
