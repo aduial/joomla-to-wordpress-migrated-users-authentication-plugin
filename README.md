@@ -1,6 +1,6 @@
 ## Joomla to WP Migrated Users Authentication Plugin
 
--    Contributors: [lucky62](https://profiles.wordpress.org/lucky62/), [asmartin](https://github.com/asmartin), [luthien] https://github.com/Luthien-in-edhil
+-    Contributors: [lucky62](https://profiles.wordpress.org/lucky62/), [asmartin](https://github.com/asmartin), [luthien] (https://github.com/Luthien-in-edhil)
 -    Tested up to: WP 4.9.5
 -    Requires at least: WP 3.X
 -    Stable tag: 1.2.0
